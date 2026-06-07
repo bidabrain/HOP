@@ -131,3 +131,14 @@ From the authors' paper, these parameters gave robust results on cosmological si
 
 - **v1.0** — Initial release
 - **v1.1** (April 2, 2002) — Fixed a bug in `regroup.c` that could cause a crash (not data corruption) for very large particle numbers
+- **v1.2** (June 7, 2026) — Bug fixes in `regroup.c` and `hop.c`:
+  - **`regroup.c` — crash**: `sort_groups()` called `fclose(f)` unconditionally; when no `.size` output file was requested, `f` was never initialized, causing undefined behavior / crash
+  - **`regroup.c` — stdout corruption**: `writetags()` and `writetagsf77()` called `fclose(f)` even when writing to stdout (pipe mode), closing stdout and corrupting all subsequent output
+  - **`regroup.c` — silent data truncation**: `readtags()` did not check the return value of `fread` for the tag array; a truncated `.hop` file would silently assign wrong group IDs to all particles after the cut point
+  - **`regroup.c` — uninitialized density data**: `merge_groups_boundaries()` did not verify that all `ngroups` entries were read before the `###` separator; a premature `###` left `gdensity[]` entries uninitialized, causing wrong peak-density decisions
+  - **`regroup.c` — missing header read check**: `densitycut()` did not check the return value of `fread` for the particle count header
+  - **`regroup.c` — buffer overflow**: filename buffers in `parsecommandline()` were `malloc(80)`; root paths longer than ~75 characters would overflow; increased to `malloc(1024)`
+  - **`regroup.c` — line buffer too small**: `merge_groups_boundaries()` used `char line[80]`; `.gbound` group lines with large integer IDs or float values could exceed 79 characters; increased to `char line[256]`
+  - **`regroup.c` / `hop.c` — binary files in text mode**: all binary input/output files (`.hop`, `.den`) were opened with `"r"`/`"w"` instead of `"rb"`/`"wb"`; results are correct on Unix but wrong on Windows
+  - **`regroup.c` / `hop.c`**: `void main()` changed to `int main()` (non-standard return type)
+  - **`regroup.c`**: added `#include <float.h>` for `FLT_MAX`

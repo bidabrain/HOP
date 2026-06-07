@@ -7,11 +7,23 @@ http://www.sns.ias.edu/~eisenste/hop/hop_doc.html */
 /* Version 1.0 (12/15/97) -- Original Release */
 /* Version 1.1 (04/02/02) -- Changed the type of variable 'block' in
 			     densitycut() function from float to int */
+/* Version 1.2 (06/07/26) -- Bug fixes:
+   - sort_groups(): fclose(f) on uninit f when fname==NULL -> crash
+   - writetags(), writetagsf77(): fclose(stdout) in pipe mode -> stdout corruption
+   - readtags(): unchecked fread return for tag array -> silent truncation
+   - merge_groups_boundaries(): no check that j==ngroups after group list read
+   - densitycut(): unchecked fread return for npart header
+   - parsecommandline(): malloc(80) filename buffers -> overflow; increased to 1024
+   - merge_groups_boundaries(): char line[80] -> char line[256]
+   - Binary files opened in text mode ("r"/"w") -> fixed to "rb"/"wb"
+   - void main() -> int main()
+   - Added #include <float.h> for FLT_MAX */
 
 #include "slice.h"
 #include <string.h>
 #include <stdio.h>
 #include <limits.h>
+#include <float.h>
 
 #define MINDENS (-FLT_MAX/3.0)
 /* This is the most negative density that can be accomodated.  Note
@@ -248,7 +260,7 @@ void parsecommandline(int argc, char *argv[], Controls *c)
 	if (c->densname==NULL) {
 	    if (rootname==NULL)
 		myerror("No density file name or root has been specified.");
-	    c->densname = (char *)malloc(80);
+	    c->densname = (char *)malloc(1024);
 	    strcpy(c->densname,rootname); strcat(c->densname, ".den");
 	}
     } else c->densname = NULL;	/* We have no reason to read it */
@@ -256,7 +268,7 @@ void parsecommandline(int argc, char *argv[], Controls *c)
     if (c->tagname==NULL) {
 	if (rootname==NULL)
 	    myerror("No .hop file name or root has been specified.");
-	c->tagname = (char *)malloc(80);
+	c->tagname = (char *)malloc(1024);
 	strcpy(c->tagname,rootname); strcat(c->tagname, ".hop");
     }
 
@@ -269,7 +281,7 @@ void parsecommandline(int argc, char *argv[], Controls *c)
 	    if (c->gmergename==NULL) {
 		if (rootname==NULL)
 		    myerror("No .gbound file name or root has been specified.");
-		c->gmergename = (char *)malloc(80);
+		c->gmergename = (char *)malloc(1024);
 		strcpy(c->gmergename,rootname); 
 		strcat(c->gmergename, ".gbound");
 	    }
@@ -289,7 +301,7 @@ void parsecommandline(int argc, char *argv[], Controls *c)
 	if (c->qpipe>0) mywarn("Writing tags to stdout.");
 	if (c->qpipe) c->outtagname = NULL;  /* Our signal to send to stdout */
 	else if (c->outtagname==NULL) {
-	    c->outtagname = (char *)malloc(80);
+	    c->outtagname = (char *)malloc(1024);
 	    strcpy(c->outtagname, outname);
 	    strcat(c->outtagname, ".tag");
 	} /* Otherwise the name was set by the user */
@@ -300,14 +312,14 @@ void parsecommandline(int argc, char *argv[], Controls *c)
 
     if (c->qsort) {
 	if (c->qpipe>=0) {	/* The user didn't specify quiet */
-	    c->outsizename = (char *)malloc(80);
+	    c->outsizename = (char *)malloc(1024);
 	    strcpy(c->outsizename, outname);
 	    strcat(c->outsizename, ".size");
 	}
     }
 
     if (c->qpipe>=0) {	/* The user didn't specify quiet */
-	c->outgmergename = (char *)malloc(80);
+	c->outgmergename = (char *)malloc(1024);
 	strcpy(c->outgmergename, outname);
 	strcat(c->outgmergename, ".gmerge");
     }
@@ -329,7 +341,7 @@ void parsecommandline(int argc, char *argv[], Controls *c)
 /* ============================== MAIN() ================================ */
 /* ====================================================================== */
 
-void main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     Grouplist gl;
     Slice *s;
@@ -376,7 +388,7 @@ void main(int argc, char *argv[])
     }
     
     free_slice(s);
-    return;
+    return 0;
 }
 
 /* ================================================================= */
@@ -397,7 +409,7 @@ void readtags(Slice *s, Grouplist *g, char *fname)
 {
     FILE *f;
 
-    if ((f=fopen(fname,"r"))==NULL) myerror("Input tag file not found.");
+    if ((f=fopen(fname,"rb"))==NULL) myerror("Input tag file not found.");
     if (fread(&(g->npart),4,1,f)!=1) myerror("Tag file read error.");
     if (fread(&(g->ngroups),4,1,f)!=1) myerror("Tag file read error.");
     fprintf(stderr,"Number of particles: %d.   Number of groups: %d.\n",
@@ -406,7 +418,10 @@ void readtags(Slice *s, Grouplist *g, char *fname)
     s->numpart = g->npart;
     s->numlist = g->npart;
     s->ntag = ivector(1,s->numlist);
-    fread(s->ntag+1, 4, s->numlist, f);	/* Read in all the tags */
+    /* Bug fix: check fread return so truncated files are caught, not silently
+       producing wrong group assignments for the missing particles. */
+    if ((int)fread(s->ntag+1, 4, s->numlist, f) != s->numlist)
+	myerror("Tag file read error: file is truncated or incomplete.");
     fclose(f);
     return;
 }
@@ -425,9 +440,10 @@ less than densthresh to -1, thus removing them from groups */
     int j, numread, npart, block;	/* block was a float by mistake */
     float density[MAXBLOCK];
 
-    if ((f=fopen(fname,"r"))==NULL)
+    if ((f=fopen(fname,"rb"))==NULL)
 	myerror("Density file not found.");
-    npart = 0; fread(&npart,4,1,f);
+    npart = 0;
+    if (fread(&npart,4,1,f)!=1) myerror("Density file header read error.");
     if (npart!=s->numpart) 
 	mywarn("Density file doesn't match slice description.");
 
@@ -517,7 +533,7 @@ the idmerge field. */
     Group *gr;
     float *gdensity, *densestbound, fdum[3], dens;
     int *densestboundgroup, changes;
-    char line[80], *tempfilename; 
+    char line[256], *tempfilename;  /* 256 chars: safe for long group lines */
     FILE *fp;
     FILE *boundfp;
 
@@ -532,7 +548,7 @@ the idmerge field. */
     densestboundgroup = ivector(0,ngroups-1);
 
     for (j=0;;) {
-	if (fgets(line, 80, fp)==NULL) myerror("Unexpected EOF in gmerge.");
+	if (fgets(line, sizeof(line), fp)==NULL) myerror("Unexpected EOF in gmerge.");
 	if (line[0]=='#' && line[1]=='#' && line[2]=='#') break;
 			/* This is the flag for the end of the group list */
 	if (line[0]=='#') continue;	/* A comment line */
@@ -544,6 +560,9 @@ the idmerge field. */
 	if (gdensity[j]<0.0) myerror("Negative density read.");
 	j++;
     }
+    /* Bug fix: verify we actually read all ngroups entries.  An early ###
+       marker (truncated file) would leave gdensity[j..ngroups-1] uninit. */
+    if (j!=ngroups) myerror("File contained fewer groups than the header claimed.");
 
     /* Now allocate the grouplist */
     gl->ngroups = ngroups;
@@ -571,7 +590,7 @@ the idmerge field. */
     if ((boundfp=fopen(tempfilename,"w"))==NULL)
 	myerror("Error opening scratch file");
 
-    while (fgets(line,80,fp)!=NULL) {
+    while (fgets(line,sizeof(line),fp)!=NULL) {
 	if (sscanf(line,"%d %d %f", &g1, &g2, &dens)!=3 || g1<0 || g2<0 || 
 		dens<0.0 || g1>=ngroups || g2>=ngroups) 
 		myerror("Error reading boundary.");
@@ -701,12 +720,13 @@ void writetags(Slice *s, Grouplist *gl, char *fname)
     FILE *f;
 
     if (fname!=NULL) {
-	if ((f=fopen(fname,"w"))==NULL) myerror("Error opening new tag file.");
+	if ((f=fopen(fname,"wb"))==NULL) myerror("Error opening new tag file.");
     } else f=stdout;
     fwrite(&(s->numpart),4,1,f);
     fwrite(&(gl->ngroups),4,1,f);
     fwrite(s->ntag+1,4,s->numlist,f);
-    fclose(f);
+    /* Bug fix: only close the file if we opened it; never close stdout. */
+    if (fname!=NULL) fclose(f);
     return;
 }
 
@@ -718,7 +738,7 @@ void writetagsf77(Slice *s, Grouplist *gl, char *fname)
     FILE *f;
     int dummy;
     if (fname!=NULL) {
-	if ((f=fopen(fname,"w"))==NULL) myerror("Error opening new tag file.");
+	if ((f=fopen(fname,"wb"))==NULL) myerror("Error opening new tag file.");
     } else f=stdout;
     dummy = 8; fwrite(&dummy,4,1,f);
     fwrite(&(s->numpart),4,1,f);
@@ -727,7 +747,8 @@ void writetagsf77(Slice *s, Grouplist *gl, char *fname)
     dummy = s->numlist*4; fwrite(&dummy,4,1,f);
     fwrite(s->ntag+1,4,s->numlist,f);
     fwrite(&dummy,4,1,f);
-    fclose(f);
+    /* Bug fix: only close the file if we opened it; never close stdout. */
+    if (fname!=NULL) fclose(f);
     return;
 }
 
@@ -788,12 +809,14 @@ numbering, setting any below mingroupsize to -1. */
 
     /* Output the .size file, if inputed name isn't NULL */
     if (fname!=NULL) {
-	f = fopen(fname,"w");
+	/* Bug fix: check fopen return; move fclose inside this block so f
+	   is never used or closed when fname==NULL (would crash on uninit f). */
+	if ((f=fopen(fname,"w"))==NULL) myerror("Can't open .size file for write.");
 	fprintf(f,"%d\n%d\n%d\n", s->numpart, partingroup, gl->nnewgroups);
 	for (j=0;j<gl->nnewgroups;j++)
 	    fprintf(f,"%d %d\n", j, (int)gsize[order[nmergedgroups-j]-1]);
+	fclose(f);
     }
-    fclose(f);
     free_ivector(order,1,nmergedgroups);
     free_vector(gsize,0,nmergedgroups-1);
     free_ivector(newnum,0,nmergedgroups-1);

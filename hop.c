@@ -14,6 +14,9 @@ http://www.sns.ias.edu/~eisenste/hop/hop_doc.html */
 /* Version 1.0 (12/15/97) -- Original Release */
 /* Version 1.1 (04/02/01) -- No changes to this file.
 			     Tiny bug fix in regroup.c */
+/* Version 1.2 (06/07/26) -- Binary output files (.den, .hop) opened in text
+			     mode ("w") fixed to binary mode ("wb"); input
+			     files likewise fixed to "rb". void main() -> int main(). */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,7 +72,7 @@ void usage(void)
 }
 
 
-void main(int argc,char **argv)
+int main(int argc,char **argv)
 {
 	KD kd;
 	SMX smx;
@@ -197,7 +200,7 @@ void main(int argc,char **argv)
 	kdInit(&kd,nBucket);
 
 	if (inputfile==NULL) fp = stdin;
-	    else if ((fp=fopen(inputfile,"r"))==NULL) {
+	    else if ((fp=fopen(inputfile,"rb"))==NULL) {
 		fprintf(stderr,"Input file not found.\n"); exit(1);
 	    }
 	ReadSimulationFile(kd,fp);
@@ -213,7 +216,7 @@ void main(int argc,char **argv)
 
 	if (bDensity==0) {
 	    INFORM("Reading Densities...\n");
-	    fp=fopen(densfile,"r");
+	    fp=fopen(densfile,"rb");
 	    assert(fp!=NULL);
 	    binInDensity(smx,fp);
 	}
@@ -251,23 +254,23 @@ void main(int argc,char **argv)
 	INFORM("Writing Output...\n");
 	if (bDensity&2) {
 	    strcpy(ach,achFile); strcat(ach,".den");
-	    fp = fopen(ach,"w"); assert(fp != NULL);
+	    fp = fopen(ach,"wb"); assert(fp != NULL);
 	    binOutDensity(smx,fp);
 	    fclose(fp);
 	}
 
 	if (bMerge&2) {
 	    strcpy(ach,achFile); strcat(ach,".gbound");
-	    fp = fopen(ach,"w"); assert(fp != NULL);
+	    fp = fopen(ach,"w"); assert(fp != NULL);  /* ASCII file: text mode ok */
 	    smx->nSmooth=nSmooth; /* Restore this for output */
-	    outGroupMerge(smx,fp);  
+	    outGroupMerge(smx,fp);
 	    fclose(fp);
 	}
 	if (bMerge) free(smx->hash);
 
 	if (bGroup&2) {
 	    strcpy(ach,achFile); strcat(ach,".hop");
-	    fp = fopen(ach,"w"); assert(fp != NULL);
+	    fp = fopen(ach,"wb"); assert(fp != NULL);
 	    binOutHop(smx,fp);
 	    fclose(fp);
 	}
@@ -275,7 +278,7 @@ void main(int argc,char **argv)
 	smFinish(smx);
 	kdFinish(kd);
 	INFORM("All Done!");
-	return;
+	return 0;
 }
 
 
