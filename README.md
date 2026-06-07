@@ -2,7 +2,7 @@
 
 HOP is an algorithm for identifying particle groups (halos) in N-body simulations based on local density estimates. It is spatially adaptive, coordinate-free, and numerically straightforward.
 
-This repository is a fork of the original HOP distribution from the [CfA HOP page](https://lweb.cfa.harvard.edu/~deisenst/hop/).
+This repository is a fork of the original HOP distribution from the [CfA HOP page](https://lweb.cfa.harvard.edu/~deisenst/hop/). Versions 1.0 and 1.1 are the work of the original authors. **All modifications from v1.2 onward are by [@bidabrain](https://github.com/bidabrain)** and are not associated with the original authors.
 
 ## Authors
 
@@ -131,7 +131,7 @@ From the authors' paper, these parameters gave robust results on cosmological si
 
 - **v1.0** — Initial release
 - **v1.1** (April 2, 2002) — Fixed a bug in `regroup.c` that could cause a crash (not data corruption) for very large particle numbers
-- **v1.2** (June 7, 2026) — Bug fixes in `regroup.c` and `hop.c`:
+- **v1.2** (June 7, 2026) — Modifications by [@bidabrain](https://github.com/bidabrain). All changes from this version onward are independent of the original authors. Bug fixes in `regroup.c` and `hop.c`:
   - **`regroup.c` — crash**: `sort_groups()` called `fclose(f)` unconditionally; when no `.size` output file was requested, `f` was never initialized, causing undefined behavior / crash
   - **`regroup.c` — stdout corruption**: `writetags()` and `writetagsf77()` called `fclose(f)` even when writing to stdout (pipe mode), closing stdout and corrupting all subsequent output
   - **`regroup.c` — silent data truncation**: `readtags()` did not check the return value of `fread` for the tag array; a truncated `.hop` file would silently assign wrong group IDs to all particles after the cut point
